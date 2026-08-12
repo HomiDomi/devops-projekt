@@ -1,59 +1,45 @@
 
-name: ticketing
-
-
-
 services:
 
   postgres:
 
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
 
-    restart: unless-stopped
+    env_file: .env
 
     environment:
 
-      POSTGRES_DB: ${POSTGRES_DB:-ticketing}
+      POSTGRES_DB: ${POSTGRES_DB}
 
-      POSTGRES_USER: ${POSTGRES_USER:-ticketing_user}
+      POSTGRES_USER: ${POSTGRES_USER}
 
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-
-    ports:
-
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     volumes:
 
       - pgdata:/var/lib/postgresql/data
 
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro
 
     healthcheck:
 
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ticketing_user} -d ${POSTGRES_DB:-ticketing}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
 
       interval: 5s
 
-      timeout: 5s
+      timeout: 3s
 
       retries: 10
 
-    networks: [backend]
+    restart: unless-stopped
 
 
 
   redis:
 
-    image: redis:7-alpine
+    image: docker.io/library/redis:alpine
 
-    restart: unless-stopped
-
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-
-    ports:
-
-      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
 
     healthcheck:
 
@@ -61,11 +47,11 @@ services:
 
       interval: 5s
 
-      timeout: 5s
+      timeout: 3s
 
       retries: 10
 
-    networks: [backend]
+    restart: unless-stopped
 
 
 
@@ -75,41 +61,21 @@ services:
 
       context: ./api
 
-      target: runtime
+      target: dev
 
-    restart: unless-stopped
+    env_file: .env
 
     environment:
 
-      API_PORT: ${API_PORT:-8080}
-
-      POSTGRES_HOST: postgres
-
-      POSTGRES_PORT: 5432
-
-      POSTGRES_DB: ${POSTGRES_DB:-ticketing}
-
-      POSTGRES_USER: ${POSTGRES_USER:-ticketing_user}
-
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-
-      REDIS_HOST: redis
-
-      REDIS_PORT: 6379
-
-      QUEUE_NAME: ${QUEUE_NAME:-ticket_orders}
-
-      NODE_ENV: ${NODE_ENV:-development}
+      API_PORT: ${API_PORT}
 
     ports:
 
-      - "${API_PORT:-8080}:8080"
+      - "${API_PORT}:8080"
 
     volumes:
 
-      - ./api/src:/app/src:ro
-
-    command: ["node", "--watch", "src/index.js"]
+      - ./api/src:/app/src
 
     depends_on:
 
@@ -121,7 +87,7 @@ services:
 
         condition: service_healthy
 
-    networks: [backend]
+    restart: unless-stopped
 
 
 
@@ -131,33 +97,13 @@ services:
 
       context: ./worker
 
-      target: runtime
+      target: dev
 
-    restart: unless-stopped
-
-    environment:
-
-      POSTGRES_HOST: postgres
-
-      POSTGRES_PORT: 5432
-
-      POSTGRES_DB: ${POSTGRES_DB:-ticketing}
-
-      POSTGRES_USER: ${POSTGRES_USER:-ticketing_user}
-
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-
-      REDIS_HOST: redis
-
-      REDIS_PORT: 6379
-
-      QUEUE_NAME: ${QUEUE_NAME:-ticket_orders}
+    env_file: .env
 
     volumes:
 
-      - ./worker/src:/app/src:ro
-
-    command: ["node", "--watch", "src/index.js"]
+      - ./worker/src:/app/src
 
     depends_on:
 
@@ -169,7 +115,7 @@ services:
 
         condition: service_healthy
 
-    networks: [backend]
+    restart: unless-stopped
 
 
 
@@ -179,41 +125,29 @@ services:
 
       context: ./frontend
 
-      target: runtime
+      target: dev
 
-    restart: unless-stopped
+    env_file: .env
 
     environment:
 
-      FRONTEND_PORT: ${FRONTEND_PORT:-3000}
+      FRONTEND_PORT: ${FRONTEND_PORT}
 
-      API_BASE_URL: ${API_BASE_URL:-http://localhost:8080}
+      API_BASE_URL: ${API_BASE_URL}
 
     ports:
 
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT}:3000"
 
     volumes:
 
-      - ./frontend/src:/app/src:ro
-
-      - ./frontend/public:/app/public:ro
-
-    command: ["node", "--watch", "src/server.js"]
+      - ./frontend/src:/app/src
 
     depends_on:
 
       - api
 
-    networks: [backend]
-
-
-
-networks:
-
-  backend:
-
-    driver: bridge
+    restart: unless-stopped
 
 
 

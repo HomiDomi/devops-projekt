@@ -1,0 +1,45 @@
+
+FROM node:20-alpine AS prod-deps
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm ci --omit=dev
+
+
+
+FROM prod-deps AS dev
+
+RUN npm ci
+
+COPY . .
+
+CMD ["npx", "nodemon", "src/server.js"]
+
+
+
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=prod-deps /app/node_modules ./node_modules
+
+COPY package*.json ./
+
+COPY src ./src
+
+RUN addgroup -S appgroup && adduser -S -u 1001 -G appgroup appuser
+
+RUN rm -rf /usr/local/lib/node_modules/npm \
+
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
+USER 1001
+
+EXPOSE 8080
+
+CMD ["node", "src/server.js"]
+
