@@ -1,0 +1,15 @@
+
+.env
+
+node_modules/
+
+npm-debug.log*
+
+k8s/secret.yaml
+
+*.sarif
+
+*.swp
+
+.DS_Store
+
