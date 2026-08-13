@@ -1,3 +1,9 @@
+# Trivy Security Scan Report — api
+
+Image: `localhost/devops-project-app_api:latest`
+Scan date: 2026-08-13 13:45 UTC
+
+```
 
 Report Summary
 
@@ -885,3 +891,4 @@ Total: 28 (UNKNOWN: 0, LOW: 2, MEDIUM: 8, HIGH: 17, CRITICAL: 1)
 │                                │                     │          │        │                   │                                                         │ integrity and confidentiality                                │
 │                                │                     │          │        │                   │                                                         │ https://avd.aquasec.com/nvd/cve-2026-41907                   │
 └────────────────────────────────┴─────────────────────┴──────────┴────────┴───────────────────┴─────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────┘
+```
