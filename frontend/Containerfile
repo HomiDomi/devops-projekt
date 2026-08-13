@@ -8,9 +8,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 
-
-FROM prod-deps A
-S dev
+FROM prod-deps AS dev
 RUN npm ci
 
 COPY . .
