@@ -1,0 +1,239 @@
+name: CI - Build, Scan, Push
+
+
+
+on:
+
+  push:
+
+    branches: [main]
+
+    paths:
+
+      - "api/**"
+
+      - "worker/**"
+
+      - "frontend/**"
+
+      - ".github/workflows/ci.yml"
+
+  pull_request:
+
+    branches: [main]
+
+    paths:
+
+      - "api/**"
+
+      - "worker/**"
+
+      - "frontend/**"
+
+
+
+env:
+
+  REGISTRY: ghcr.io
+
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+
+
+jobs:
+
+  build-scan-push:
+
+    name: Build, scan and push (${{ matrix.component }})
+
+    runs-on: ubuntu-latest
+
+    permissions:
+
+      contents: read
+
+      packages: write
+
+      security-events: write
+
+    strategy:
+
+      # fail-fast: false znači da ako jedna komponenta padne na Trivy
+
+      # gateu, ostale se svejedno dovrše - lakše je odjednom vidjeti
+
+      # sve probleme umjesto ih otkrivati jednu po jednu kroz više runova.
+
+      fail-fast: false
+
+      matrix:
+
+        component: [api, worker, frontend]
+
+
+
+    steps:
+
+      - name: Checkout repozitorija
+
+        uses: actions/checkout@v4
+
+
+
+      - name: Postavi Docker Buildx
+
+        uses: docker/setup-buildx-action@v3
+
+
+
+      - name: Izgradi produkcijski image (lokalno, za skeniranje)
+
+        uses: docker/build-push-action@v6
+
+        with:
+
+          context: ./${{ matrix.component }}
+
+          file: ./${{ matrix.component }}/Containerfile
+
+          target: production
+
+          tags: local/${{ matrix.component }}:scan
+
+          load: true
+
+          push: false
+
+          cache-from: type=gha
+
+          cache-to: type=gha,mode=max
+
+
+
+      - name: Trivy sken - quality gate (CRITICAL blokira build)
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+
+          image-ref: local/${{ matrix.component }}:scan
+
+          format: table
+
+          severity: CRITICAL
+
+          exit-code: "1"
+
+          ignore-unfixed: true
+
+
+
+      - name: Trivy sken - puni izvještaj (HIGH+CRITICAL, informativno)
+
+        # Ovaj korak nikad ne blokira pipeline (exit-code: "0"), samo
+
+        # ispisuje puniji nalaz u logu za pregled - CRITICAL gate iznad
+
+        # je taj koji stvarno odlučuje prolazi li build.
+
+        if: always()
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+
+          image-ref: local/${{ matrix.component }}:scan
+
+          format: table
+
+          severity: HIGH,CRITICAL
+
+          exit-code: "0"
+
+          ignore-unfixed: true
+
+
+
+      - name: Trivy sken - SARIF za GitHub Security tab
+
+        if: always()
+
+        uses: aquasecurity/trivy-action@0.28.0
+
+        with:
+
+          image-ref: local/${{ matrix.component }}:scan
+
+          format: sarif
+
+          output: trivy-${{ matrix.component }}.sarif
+
+          severity: HIGH,CRITICAL
+
+          exit-code: "0"
+
+          ignore-unfixed: true
+
+
+
+      - name: Objavi SARIF u GitHub Security tab
+
+        if: always()
+
+        uses: github/codeql-action/upload-sarif@v3
+
+        with:
+
+          sarif_file: trivy-${{ matrix.component }}.sarif
+
+          category: trivy-${{ matrix.component }}
+
+
+
+      # Push na GHCR ide TEK nakon što je Trivy gate iznad prošao -
+
+      # ako je prethodni "Trivy sken - quality gate" korak pao,
+
+      # cijeli job se prekida i ovaj korak se nikad ne izvrši.
+
+      - name: Prijava na GHCR
+
+        if: github.event_name == 'push'
+
+        uses: docker/login-action@v3
+
+        with:
+
+          registry: ${{ env.REGISTRY }}
+
+          username: ${{ github.actor }}
+
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+      - name: Izgradi i pushaj na GHCR
+
+        if: github.event_name == 'push'
+
+        uses: docker/build-push-action@v6
+
+        with:
+
+          context: ./${{ matrix.component }}
+
+          file: ./${{ matrix.component }}/Containerfile
+
+          target: production
+
+          push: true
+
+          tags: |
+
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketing-${{ matrix.component }}:latest
+
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/ticketing-${{ matrix.component }}:${{ github.sha }}
+
+          cache-from: type=gha
+
+          cache-to: type=gha,mode=max
