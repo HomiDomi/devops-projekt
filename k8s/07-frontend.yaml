@@ -1,0 +1,227 @@
+apiVersion: image.openshift.io/v1
+
+kind: ImageStream
+
+metadata:
+
+  name: frontend
+
+  labels:
+
+    app: ticketing
+
+    component: frontend
+
+spec:
+
+  lookupPolicy:
+
+    local: false
+
+---
+
+apiVersion: build.openshift.io/v1
+
+kind: BuildConfig
+
+metadata:
+
+  name: frontend
+
+  labels:
+
+    app: ticketing
+
+    component: frontend
+
+spec:
+
+  source:
+
+    type: Git
+
+    git:
+
+      uri: "https://github.com/HomiDomi/devops-projekt"
+
+      ref: main
+
+    contextDir: frontend
+
+  strategy:
+
+    type: Docker
+
+    dockerStrategy:
+
+      dockerfilePath: Containerfile
+
+      # Isto kao api/worker: "production" je zadnja FROM faza.
+
+  output:
+
+    to:
+
+      kind: ImageStreamTag
+
+      name: "frontend:latest"
+
+  triggers:
+
+    - type: ConfigChange
+
+    - type: ImageChange
+
+  resources:
+
+    limits:
+
+      cpu: "1"
+
+      memory: 512Mi
+
+    requests:
+
+      cpu: 200m
+
+      memory: 256Mi
+
+---
+
+apiVersion: apps/v1
+
+kind: Deployment
+
+metadata:
+
+  name: frontend
+
+  labels:
+
+    app: ticketing
+
+    component: frontend
+
+spec:
+
+  replicas: 1
+
+  selector:
+
+    matchLabels:
+
+      app: ticketing
+
+      component: frontend
+
+  template:
+
+    metadata:
+
+      labels:
+
+        app: ticketing
+
+        component: frontend
+
+    spec:
+
+      containers:
+
+        - name: frontend
+
+          image: "image-registry.openshift-image-registry.svc:5000/ticketing-app/frontend:latest"
+
+          ports:
+
+            - containerPort: 3000
+
+              protocol: TCP
+
+          envFrom:
+
+            - configMapRef:
+
+                name: ticketing-config
+
+            - secretRef:
+
+                name: ticketing-secret
+
+          readinessProbe:
+
+            tcpSocket:
+
+              port: 3000
+
+            initialDelaySeconds: 5
+
+            periodSeconds: 10
+
+            timeoutSeconds: 3
+
+            failureThreshold: 3
+
+          livenessProbe:
+
+            tcpSocket:
+
+              port: 3000
+
+            initialDelaySeconds: 15
+
+            periodSeconds: 20
+
+            timeoutSeconds: 3
+
+            failureThreshold: 3
+
+          resources:
+
+            requests:
+
+              cpu: 100m
+
+              memory: 128Mi
+
+            limits:
+
+              cpu: 500m
+
+              memory: 256Mi
+
+---
+
+apiVersion: v1
+
+kind: Service
+
+metadata:
+
+  name: frontend
+
+  labels:
+
+    app: ticketing
+
+    component: frontend
+
+spec:
+
+  selector:
+
+    app: ticketing
+
+    component: frontend
+
+  ports:
+
+    - name: http
+
+      port: 3000
+
+      targetPort: 3000
+
+      protocol: TCP
+
+  type: ClusterIP

@@ -1,0 +1,195 @@
+
+apiVersion: v1
+
+kind: PersistentVolumeClaim
+
+metadata:
+
+  name: postgres-pvc
+
+  labels:
+
+    app: ticketing
+
+    component: postgres
+
+spec:
+
+  accessModes:
+
+    - ReadWriteOnce
+
+  resources:
+
+    requests:
+
+      storage: 1Gi
+
+---
+
+apiVersion: apps/v1
+
+kind: Deployment
+
+metadata:
+
+  name: postgres
+
+  labels:
+
+    app: ticketing
+
+    component: postgres
+
+spec:
+
+  replicas: 1
+
+  strategy:
+
+    type: Recreate
+
+  selector:
+
+    matchLabels:
+
+      app: ticketing
+
+      component: postgres
+
+  template:
+
+    metadata:
+
+      labels:
+
+        app: ticketing
+
+        component: postgres
+
+    spec:
+
+      securityContext:
+
+        fsGroup: 1000760000
+
+      containers:
+
+        - name: postgres
+
+          image: image-registry.openshift-image-registry.svc:5000/openshift/postgresql:15-el9
+
+          ports:
+
+            - containerPort: 5432
+
+          env:
+
+            - name: POSTGRESQL_DATABASE
+
+              valueFrom:
+
+                configMapKeyRef:
+
+                  name: ticketing-config
+
+                  key: POSTGRES_DB
+
+            - name: POSTGRESQL_USER
+
+              valueFrom:
+
+                configMapKeyRef:
+
+                  name: ticketing-config
+
+                  key: POSTGRES_USER
+
+            - name: POSTGRESQL_PASSWORD
+
+              valueFrom:
+
+                secretKeyRef:
+
+                  name: ticketing-secret
+
+                  key: POSTGRES_PASSWORD
+
+          volumeMounts:
+
+            - name: postgres-storage
+
+              mountPath: /var/lib/pgsql/data
+
+          resources:
+
+            requests:
+
+              cpu: "100m"
+
+              memory: "128Mi"
+
+            limits:
+
+              cpu: "500m"
+
+              memory: "256Mi"
+
+          readinessProbe:
+
+            tcpSocket:
+
+              port: 5432
+
+            initialDelaySeconds: 10
+
+            periodSeconds: 10
+
+          livenessProbe:
+
+            tcpSocket:
+
+              port: 5432
+
+            initialDelaySeconds: 20
+
+            periodSeconds: 20
+
+      volumes:
+
+        - name: postgres-storage
+
+          persistentVolumeClaim:
+
+            claimName: postgres-pvc
+
+---
+
+apiVersion: v1
+
+kind: Service
+
+metadata:
+
+  name: postgres
+
+  labels:
+
+    app: ticketing
+
+    component: postgres
+
+spec:
+
+  selector:
+
+    app: ticketing
+
+    component: postgres
+
+  ports:
+
+    - port: 5432
+
+      targetPort: 5432
+

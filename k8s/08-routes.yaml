@@ -1,0 +1,73 @@
+apiVersion: route.openshift.io/v1
+
+kind: Route
+
+metadata:
+
+  name: frontend
+
+  labels:
+
+    app: ticketing
+
+    component: frontend
+
+spec:
+
+  to:
+
+    kind: Service
+
+    name: frontend
+
+    weight: 100
+
+  port:
+
+    targetPort: http
+
+  # host: namjerno izostavljen - OpenShift ga sam generira po defaultnom
+
+  # obrascu <route-name>-<namespace>.<apps-domena-clustera>.
+
+  tls:
+
+    termination: edge
+
+    insecureEdgeTerminationPolicy: Redirect
+
+---
+
+apiVersion: route.openshift.io/v1
+
+kind: Route
+
+metadata:
+
+  name: api
+
+  labels:
+
+    app: ticketing
+
+    component: api
+
+spec:
+
+  to:
+
+    kind: Service
+
+    name: api
+
+    weight: 100
+
+  port:
+
+    targetPort: http
+
+  tls:
+
+    termination: edge
+
+    insecureEdgeTerminationPolicy: Redirect

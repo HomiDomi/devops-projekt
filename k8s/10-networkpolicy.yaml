@@ -1,0 +1,235 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  labels:
+    app: ticketing
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Frontend: prima promet samo od OpenShift Route-a (ingress-router),
+# smije izlazno komunicirati samo s api.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-policy
+  labels:
+    app: ticketing
+    component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: ticketing
+      component: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: api
+      ports:
+        - protocol: TCP
+          port: 8080
+    # DNS mora ostati dopušten, inače ništa ne može razrješavati imena servisa.
+    # OpenShift-ov interni CoreDNS (openshift-dns) sluša na portu 5353
+    # unutar poda - Service dns-default samo prevodi 53 -> 5353, a OVN-
+    # Kubernetes NetworkPolicy evaluira nakon tog prijevoda (na stvarnom
+    # pod IP:portu), pa 53 ovdje ne bi pogodio ništa.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+          podSelector:
+            matchLabels:
+              dns.operator.openshift.io/daemonset-dns: default
+      ports:
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+---
+# API: prima promet od frontenda i Route-a, izlazno prema postgres i redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-policy
+  labels:
+    app: ticketing
+    component: api
+spec:
+  podSelector:
+    matchLabels:
+      app: ticketing
+      component: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: frontend
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # OpenShift-ov interni CoreDNS (openshift-dns) sluša na portu 5353
+    # unutar poda - Service dns-default samo prevodi 53 -> 5353, a OVN-
+    # Kubernetes NetworkPolicy evaluira nakon tog prijevoda (na stvarnom
+    # pod IP:portu), pa 53 ovdje ne bi pogodio ništa.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+          podSelector:
+            matchLabels:
+              dns.operator.openshift.io/daemonset-dns: default
+      ports:
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+---
+# Worker: nema ulaznog prometa (nitko mu se ne obraća preko mreže),
+# izlazno prema postgres i redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-policy
+  labels:
+    app: ticketing
+    component: worker
+spec:
+  podSelector:
+    matchLabels:
+      app: ticketing
+      component: worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # OpenShift-ov interni CoreDNS (openshift-dns) sluša na portu 5353
+    # unutar poda - Service dns-default samo prevodi 53 -> 5353, a OVN-
+    # Kubernetes NetworkPolicy evaluira nakon tog prijevoda (na stvarnom
+    # pod IP:portu), pa 53 ovdje ne bi pogodio ništa.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+          podSelector:
+            matchLabels:
+              dns.operator.openshift.io/daemonset-dns: default
+      ports:
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+---
+# Postgres: prima promet samo od api i worker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  labels:
+    app: ticketing
+    component: postgres
+spec:
+  podSelector:
+    matchLabels:
+      app: ticketing
+      component: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: api
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: worker
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Redis: prima promet samo od api i worker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  labels:
+    app: ticketing
+    component: redis
+spec:
+  podSelector:
+    matchLabels:
+      app: ticketing
+      component: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: api
+        - podSelector:
+            matchLabels:
+              app: ticketing
+              component: worker
+      ports:
+        - protocol: TCP
+          port: 6379

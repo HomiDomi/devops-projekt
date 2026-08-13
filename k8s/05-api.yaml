@@ -1,0 +1,225 @@
+apiVersion: image.openshift.io/v1
+
+kind: ImageStream
+
+metadata:
+
+  name: api
+
+  labels:
+
+    app: ticketing
+
+    component: api
+
+spec:
+
+  lookupPolicy:
+
+    local: false
+
+---
+
+apiVersion: build.openshift.io/v1
+
+kind: BuildConfig
+
+metadata:
+
+  name: api
+
+  labels:
+
+    app: ticketing
+
+    component: api
+
+spec:
+
+  source:
+
+    type: Git
+
+    git:
+
+      uri: "https://github.com/HomiDomi/devops-projekt"
+
+      ref: main
+
+    contextDir: api
+
+  strategy:
+
+    type: Docker
+
+    dockerStrategy:
+
+      dockerfilePath: Containerfile
+
+  output:
+
+    to:
+
+      kind: ImageStreamTag
+
+      name: "api:latest"
+
+  triggers:
+
+    - type: ConfigChange
+
+    - type: ImageChange
+
+  resources:
+
+    limits:
+
+      cpu: "1"
+
+      memory: 512Mi
+
+    requests:
+
+      cpu: 200m
+
+      memory: 256Mi
+
+---
+
+apiVersion: apps/v1
+
+kind: Deployment
+
+metadata:
+
+  name: api
+
+  labels:
+
+    app: ticketing
+
+    component: api
+
+spec:
+
+  replicas: 1
+
+  selector:
+
+    matchLabels:
+
+      app: ticketing
+
+      component: api
+
+  template:
+
+    metadata:
+
+      labels:
+
+        app: ticketing
+
+        component: api
+
+    spec:
+
+      containers:
+
+        - name: api
+
+          image: "image-registry.openshift-image-registry.svc:5000/ticketing-app/api:latest"
+
+          ports:
+
+            - containerPort: 8080
+
+              protocol: TCP
+
+          envFrom:
+
+            - configMapRef:
+
+                name: ticketing-config
+
+            - secretRef:
+
+                name: ticketing-secret
+
+          readinessProbe:
+
+            tcpSocket:
+
+              port: 8080
+
+            initialDelaySeconds: 5
+
+            periodSeconds: 10
+
+            timeoutSeconds: 3
+
+            failureThreshold: 3
+
+          livenessProbe:
+
+            tcpSocket:
+
+              port: 8080
+
+            initialDelaySeconds: 15
+
+            periodSeconds: 20
+
+            timeoutSeconds: 3
+
+            failureThreshold: 3
+
+          resources:
+
+            requests:
+
+              cpu: 100m
+
+              memory: 128Mi
+
+            limits:
+
+              cpu: 500m
+
+              memory: 256Mi
+
+---
+
+apiVersion: v1
+
+kind: Service
+
+metadata:
+
+  name: api
+
+  labels:
+
+    app: ticketing
+
+    component: api
+
+spec:
+
+  selector:
+
+    app: ticketing
+
+    component: api
+
+  ports:
+
+    - name: http
+
+      port: 8080
+
+      targetPort: 8080
+
+      protocol: TCP
+
+  type: ClusterIP

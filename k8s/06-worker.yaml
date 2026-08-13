@@ -1,0 +1,191 @@
+apiVersion: image.openshift.io/v1
+
+kind: ImageStream
+
+metadata:
+
+  name: worker
+
+  labels:
+
+    app: ticketing
+
+    component: worker
+
+spec:
+
+  lookupPolicy:
+
+    local: false
+
+---
+
+apiVersion: build.openshift.io/v1
+
+kind: BuildConfig
+
+metadata:
+
+  name: worker
+
+  labels:
+
+    app: ticketing
+
+    component: worker
+
+spec:
+
+  source:
+
+    type: Git
+
+    git:
+
+      uri: "https://github.com/HomiDomi/devops-projekt"
+
+      ref: main
+
+    contextDir: worker
+
+  strategy:
+
+    type: Docker
+
+    dockerStrategy:
+
+      dockerfilePath: Containerfile
+
+      # Isto kao kod api: "production" je zadnja FROM faza,
+
+      # pa Buildah po defaultu builda upravo nju.
+
+  output:
+
+    to:
+
+      kind: ImageStreamTag
+
+      name: "worker:latest"
+
+  triggers:
+
+    - type: ConfigChange
+
+    - type: ImageChange
+
+  resources:
+
+    limits:
+
+      cpu: "1"
+
+      memory: 512Mi
+
+    requests:
+
+      cpu: 200m
+
+      memory: 256Mi
+
+---
+
+apiVersion: apps/v1
+
+kind: Deployment
+
+metadata:
+
+  name: worker
+
+  labels:
+
+    app: ticketing
+
+    component: worker
+
+spec:
+
+  replicas: 1
+
+  selector:
+
+    matchLabels:
+
+      app: ticketing
+
+      component: worker
+
+  template:
+
+    metadata:
+
+      labels:
+
+        app: ticketing
+
+        component: worker
+
+    spec:
+
+      containers:
+
+        - name: worker
+
+          image: "image-registry.openshift-image-registry.svc:5000/ticketing-app/worker:latest"
+
+          # Worker nema HTTP/TCP port - čita iz Redis queuea (ticket_orders)
+
+          # i piše u Postgres, pa ovdje nema containerPort ni tcpSocket probe.
+
+          envFrom:
+
+            - configMapRef:
+
+                name: ticketing-config
+
+            - secretRef:
+
+                name: ticketing-secret
+
+          # Exec liveness probe: provjerava da node proces stvarno postoji
+
+          # (najbliže što možemo dobiti bez HTTP/TCP endpointa).
+
+          livenessProbe:
+
+            exec:
+
+              command:
+
+                - sh
+
+                - -c
+
+                - "pgrep -f 'node src/worker.js'"
+
+            initialDelaySeconds: 15
+
+            periodSeconds: 30
+
+            timeoutSeconds: 5
+
+            failureThreshold: 3
+
+          resources:
+
+            requests:
+
+              cpu: 100m
+
+              memory: 128Mi
+
+            limits:
+
+              cpu: 500m
+
+              memory: 256Mi
+
+      # Isto kao api - nema custom securityContext, restricted SCC
+
+      # dodijeli proizvoljni UID iz 1000760000/10000 raspona.
