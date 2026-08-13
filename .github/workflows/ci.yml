@@ -36,8 +36,6 @@ env:
 
   REGISTRY: ghcr.io
 
-  IMAGE_OWNER: ${{ github.repository_owner }}
-
 
 
 jobs:
@@ -77,6 +75,14 @@ jobs:
       - name: Checkout repozitorija
 
         uses: actions/checkout@v4
+
+
+
+      - name: Postavi lowercase naziv vlasnika (GHCR zahtijeva mala slova)
+
+        run: |
+
+          echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
 
 
