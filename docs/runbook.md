@@ -1,3 +1,4 @@
+
 # Runbook — Secure Event Ticketing Platform (OpenShift)
 
 
@@ -506,6 +507,112 @@ scopeom uključenim).
 
 
 
+### NetworkPolicy: `oc start-build` puca na DNS/git-clone timeout
+
+
+
+**Uzrok:** `default-deny-all` NetworkPolicy blokira sav promet dok se
+
+eksplicitno ne dopusti — a OpenShift build podovi (tip `build-pod`) nemaju
+
+standardne `app`/`component` labele koje ostatak policy skupa očekuje. Bez
+
+posebnog pravila, build podovi nemaju DNS razrješavanje ni izlazni pristup
+
+prema Git repozitoriju, pa svaki `oc start-build` nakon primjene
+
+`10-networkpolicy.yaml` završava u timeoutu tijekom kloniranja izvora.
+
+
+
+**Rješenje:** dodano posebno pravilo `build-pods-policy` u
+
+`10-networkpolicy.yaml` koje dopušta puni egress podovima s labelom
+
+`openshift.io/build.name` (Exists). Build podovi su kratkotrajni i
+
+izolirani samim procesom builda, pa širi egress za njih predstavlja
+
+prihvatljiv sigurnosni kompromis:
+
+
+
+```yaml
+
+podSelector:
+
+  matchExpressions:
+
+    - key: openshift.io/build.name
+
+      operator: Exists
+
+policyTypes:
+
+  - Egress
+
+egress:
+
+  - {}
+
+```
+
+
+
+### Rollback ne mijenja stvarnu servisiranu verziju kad Deployment koristi `:latest`
+
+
+
+**Simptom:** `oc rollout undo deployment/frontend` prijavljuje uspjeh
+
+(`deployment.apps/frontend rolled back`), ali `curl` na aplikaciju i dalje
+
+vraća novu (pokvarenu) verziju.
+
+
+
+**Uzrok:** `rollout undo` vraća samo prethodni pod template iz revision
+
+historyja. Ako taj template referencira pomični tag (`:latest`) umjesto
+
+konkretnog image digesta, "vraćeni" template i dalje pokazuje na isti image
+
+koji `:latest` tag u međuvremenu preuzeo — sam tag nije verzioniran, samo
+
+ono na što trenutno pokazuje.
+
+
+
+**Rješenje:** za pouzdan rollback potrebno je eksplicitno pinnati image na
+
+konkretan SHA digest prethodne dobre verzije:
+
+
+
+```bash
+
+oc describe is frontend -n ticketing-app   # pronaći SHA digest željene verzije
+
+oc set image deployment/frontend \
+
+  frontend=image-registry.openshift-image-registry.svc:5000/ticketing-app/frontend@sha256:<digest> \
+
+  -n ticketing-app
+
+```
+
+
+
+**Pouka:** za produkcijske deploymente izbjegavati pomične tagove
+
+(`:latest`) i umjesto toga referencirati imutabilne image digeste ili
+
+verzionirane tagove, čime `rollout undo` postaje pouzdan mehanizam bez
+
+ručne intervencije.
+
+
+
 ## Kontakti / vlasništvo
 
 
@@ -513,3 +620,4 @@ scopeom uključenim).
 Ovaj runbook prati stanje projekta na datum zadnje izmjene. Za pitanja o
 
 arhitekturnim odlukama, vidi `docs/architecture.md`.
+
