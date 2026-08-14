@@ -233,3 +233,36 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+
+---
+
+apiVersion: networking.k8s.io/v1
+
+kind: NetworkPolicy
+
+metadata:
+
+  name: build-pods-policy
+
+  labels:
+
+    app: ticketing
+
+spec:
+
+  podSelector:
+
+    matchExpressions:
+
+      - key: openshift.io/build.name
+
+        operator: Exists
+
+  policyTypes:
+
+    - Egress
+
+  egress:
+
+    - {}
+
